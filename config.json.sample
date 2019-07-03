@@ -1,0 +1,55 @@
+{
+    "website": {
+        "home_page": "http://www.forexmospherians.com/", 
+        "login_credentials": {
+            "xg_token": "", 
+            "password": "pass23", 
+            "emailAddress": "example@example.com"
+        }, 
+        "request_page": "main/comment/create", 
+        "signin_page": "main/authorization/doSignIn?target=http%3A%2F%2Fwww.forexmospherians.com%2F{}%2F{}", 
+        "pass_data": {
+            "count": 10, 
+            "ParentCommentId": "", 
+            "g-recaptcha-response": "", 
+            "id": "6646392:BlogEntry:144118"
+        }
+    }, 
+    "oanda_api": {
+        "data_params": {
+            "count": "370", 
+            "price": "M"
+        }, 
+        "pairs": [
+            "EUR_USD", 
+            "GBP_USD", 
+            "USD_CHF", 
+            "AUD_USD", 
+            "NZD_USD", 
+            "USD_JPY", 
+            "USD_CAD", 
+            "USD_MXN", 
+            "EUR_CHF", 
+            "EUR_JPY", 
+            "EUR_AUD", 
+            "EUR_GBP", 
+            "EUR_CAD", 
+            "EUR_JPY", 
+            "EUR_NZD", 
+            "NZD_CAD", 
+            "AUD_CHF", 
+            "AUD_CAD", 
+            "GBP_AUD", 
+            "GBP_CHF", 
+            "GBP_CAD", 
+            "CHF_JPY", 
+            "CAD_CHF", 
+            "NZD_JPY"
+        ], 
+        "token": "2h043itj43ccggwe6apcm65nn-example-token", 
+        "granularities": [
+            "M15", 
+            "H4"
+        ]
+    }
+}
