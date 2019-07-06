@@ -7,7 +7,8 @@ import requests
 from bs4 import BeautifulSoup
 import json
 from itertools import product
-
+import sys
+from numpy import floor
 
 class LoginError(Exception):
     pass
@@ -26,6 +27,7 @@ class BotSalieri:
         candidates (dict): Dict of candidates meeting tradable criterions
         decision (str): Best choice of results candidates, e.g. Buy USD_JPY
         post_message (str): Message to be posted as a status or blogpost
+        balance_file (DataFrame): File with data to count total balance gain
     """
     #TODO: is df passed by value or reference in _add_indicator_values??
     def __init__(self):
@@ -38,6 +40,7 @@ class BotSalieri:
         self.candidates = {}
         self.decision = 'Stay flat'
         self.post_message = 'I\'m sitting on my hands for this seance...'
+        self.balance_data = self._total_balance_file()
 
 
     def get_data(self):
@@ -204,7 +207,79 @@ class BotSalieri:
         rd = API(access_token=self.oanda_api['token']).request(r)
         data = [rd['candles'][i]['mid']['c']
             for i in range(0, len(rd['candles']))]
-        return data[-1]
+        return float(data[-1])
+
+
+    def comment_prev_blogpost(self):
+        """Compute the profit/loss on previous trading signal posted and post it
+        to the blog_page
+        """
+        try:
+            df = pd.read_csv('posts.csv')
+            if df.empty:
+                return
+        except:
+            return
+        if 'JPY' in df.loc[0, 'pair']:
+            multiplier = 100
+        else:
+            multiplier = 10000
+        curr_price = self._ret_current_price(df.loc[0, 'pair'])
+        if df.loc[0, 'dir'] == 'Buy':
+            delta_pips = (curr_price - df.loc[0, 'price'])*multiplier
+        elif df.loc[0, 'dir'] == 'Sell':
+            delta_pips = (df.loc[0, 'price'] - curr_price)*multiplier
+        if delta_pips >= 0:
+            self.post_message = 'Total pips gained: ' + str(floor(delta_pips))
+        else:
+            self.post_message = 'Total pips lost:'  + str(floor(delta_pips))
+        self._update_total_balance_file(delta_pips)
+        mssg = '<br><br>Until today the overall {} was: '
+        total_balance = self.balance_data.loc[0, 'balance']
+        if total_balance >= 0:
+            self.post_message += mssg.format('gain') + str(floor(total_balance))
+        else:
+            self.post_message += mssg.format('loss') + str(floor(total_balance))
+        self.make_blogpost()
+        #clear posts
+        pd.DataFrame().to_csv('posts.csv')
+
+
+    def _total_balance_file(self, filename='profit.csv'):
+        """Profit counter file for purpose of profit counting over some time
+        period
+
+        args:
+            filename (str): set by default. but can be changed for different
+                bots
+
+        returns:
+            df (DataFrame): returns pandas DataFrame with data in it
+        """
+        ##TODO: add filename to config.json
+        try:
+            df = pd.read_csv(filename)
+        except:
+            df = pd.DataFrame({'balance':[0]})
+            df.to_csv(filename)
+        return df
+
+
+    def _update_total_balance_file(self, delta_pips, filename='profit.csv'):
+        """Update profit counter file for purpose of profit counting over some
+        time period
+
+        args:
+            filename (str): set by default. but can be changed for different
+                bots
+        """
+        ##TODO: add filename to config.json
+        self.balance_data.loc[0, 'balance'] += delta_pips
+        try:
+            self.balance_data = self.balance_data.drop(columns=['Unnamed: 0'])
+        except:
+            pass
+        self.balance_data.to_csv(filename)
 
 
     def print_data(self, pair):
@@ -222,9 +297,15 @@ class BotSalieri:
 
 if __name__ == '__main__':
     salieri = BotSalieri()
-    salieri.get_data()
-    salieri.compute_indicators()
-    salieri.find_candidates()
-    salieri.take_decision()
-    salieri.create_message()
-    salieri.make_blogpost()
+    if sys.argv[1] == 'blogposter':
+        salieri.get_data()
+        salieri.compute_indicators()
+        salieri.find_candidates()
+        salieri.take_decision()
+        salieri.create_message()
+        salieri.save_post()
+        salieri.make_blogpost()
+    elif sys.argv[1] == 'profitcounter':
+        salieri.comment_prev_blogpost()
+    else:
+        print('Wrong argument. Type \'blogposter\' or \'profitcounter\'.')
