@@ -22,21 +22,24 @@ class BotSalieri:
     Attributes:
         oanda_api (dict): Contains API key and data specifications (pairs etc..)
         website (dict): Contains login credentials and URLs to request
-        data_M15 (dict): Dict of DataFrames /w 15minute candles (for each pair)
-        data_H4 (dict): Dict of DataFrames /w 4hour candles (for each pair)
+        ma_length (int): Length of moving average period
+        data (dict): Dict of currency pairs for which multiple time-frames are
+            saved in DataFrames, how many of them depends on 'granularities'
         candidates (dict): Dict of candidates meeting tradable criterions
         decision (str): Best choice of results candidates, e.g. Buy USD_JPY
         post_message (str): Message to be posted as a status or blogpost
         balance_file (DataFrame): File with data to count total balance gain
     """
+
+    ## TODO: Wrong evaluation when dicitonary of granularities is unordered !!!
     #TODO: is df passed by value or reference in _add_indicator_values??
     def __init__(self):
         with open('config.json', 'r') as config_file:
             config = json.load(config_file)
         self.oanda_api = config['oanda_api']
         self.website = config['website']
-        self.data_M15 = {}
-        self.data_H4 = {}
+        self.ma_length = int(config['indicators']['ma_length'])
+        self.data = config['oanda_api']['pairs']
         self.candidates = {}
         self.decision = 'Stay flat'
         self.post_message = 'I\'m sitting on my hands for this seance...'
@@ -44,32 +47,29 @@ class BotSalieri:
 
 
     def get_data(self):
-        """Download data from oandaV20 API and pass them to data_M15 and data_H4
-        as DataFrames
+        """Download data from oandaV20 API for each currency pair and pass them
+        to 'data' as DataFrames
         """
-        for g, p in product(self.oanda_api['granularities'],
-                            self.oanda_api['pairs']):
+        for (key, value), g in product(
+            self.data.items(), self.oanda_api['granularities']):
             self.oanda_api['data_params'].update({'granularity': g})
             r = instruments.InstrumentsCandles(
-                instrument=p, params=self.oanda_api['data_params'])
+                instrument=key, params=self.oanda_api['data_params'])
             rd = API(access_token=self.oanda_api['token']).request(r)
             data = [rd['candles'][i]['mid']['c']
                 for i in range(0, len(rd['candles']))]
-            if g == 'M15':
-                self.data_M15.update({p: pd.DataFrame({'close':data})})
-            else:
-                self.data_H4.update({p: pd.DataFrame({'close':data})})
+            value.update({g: pd.DataFrame({'close':data})})
 
 
     def compute_indicators(self):
         """Update candle data with indicator values
         """
-        for p in self.oanda_api['pairs']:
-            self.data_M15[p] = self._add_indicator_values(self.data_M15[p], 360)
-            self.data_H4[p] = self._add_indicator_values(self.data_H4[p], 270)
+        for value, g in product(
+            self.data.values(), self.oanda_api['granularities']):
+            value[g] = self._add_indicator_values(value[g])
 
 
-    def _add_indicator_values(self, df, period=360):
+    def _add_indicator_values(self, df):
         """Calcualate indicator values, simple and weighted moving average
 
         args:
@@ -79,10 +79,10 @@ class BotSalieri:
         returns:
             updated df (DataFrame)
         """
-        sum = np.sum([x for x in range(1,period+1)])
-        weights = [x/sum for x in range(1, period+1)]
-        df['ma'] = df['close'].rolling(period).apply(np.mean, raw=True)
-        df['wma'] = df['close'].rolling(period).apply(
+        sum = np.sum([x for x in range(1,self.ma_length+1)])
+        weights = [x/sum for x in range(1, self.ma_length+1)]
+        df['ma'] = df['close'].rolling(self.ma_length).apply(np.mean, raw=True)
+        df['wma'] = df['close'].rolling(self.ma_length).apply(
             lambda x: np.average(x, weights=weights), raw=True)
         return df
 
@@ -90,22 +90,26 @@ class BotSalieri:
     def find_candidates(self):
         """Updates instance attribute candidates with tradable currency pairs
         """
-        for p in self.oanda_api['pairs']:
-            last_close = float(self.data_M15[p]['close'].iloc[-1])
-            last_ma = float(self.data_M15[p]['ma'].iloc[-1])
-            last_wma = float(self.data_M15[p]['wma'].iloc[-1])
+        first_gran = self.oanda_api['granularities'][0]
+        for key, value in self.data.items():
+            last_close = float(value[first_gran]['close'].iloc[-1])
+            last_ma = float(value[first_gran]['ma'].iloc[-1])
+            gran_cntr = 0
+            for g in self.oanda_api['granularities']:
+                if value[g]['wma'].iloc[-1] > value[g]['ma'].iloc[-1]:
+                    gran_cntr += 1
+                if value[g]['wma'].iloc[-1] < value[g]['ma'].iloc[-1]:
+                    gran_cntr -= 1
             #Buy side
-            if (self.data_H4[p]['wma'].iloc[-1] > self.data_H4[p]['ma'].iloc[-1]
-                and last_wma > last_ma):
+            if gran_cntr == len(self.oanda_api['granularities']):
                 pct_diff = last_close/last_ma - 1
                 if pct_diff > 0:
-                    self.candidates.update({p: pct_diff})
+                    self.candidates.update({key: pct_diff})
             #Sell side
-            if (self.data_H4[p]['wma'].iloc[-1] < self.data_H4[p]['ma'].iloc[-1]
-                and last_wma < last_ma):
+            if gran_cntr == -1*len(self.oanda_api['granularities']):
                 pct_diff = last_ma/last_close - 1
                 if pct_diff > 0:
-                    self.candidates.update({p: -1*pct_diff})
+                    self.candidates.update({key: -1*pct_diff})
 
 
     def take_decision(self):
@@ -282,9 +286,17 @@ class BotSalieri:
         self.balance_data.to_csv(filename)
 
 
+    '''def create_table_to_post(self):
+        """Create table witch all currency pairs defined in config.json, in this
+        table all main time-frame are examined (its direction) and posted
+        """
+        PERIOD = 360'''
+
+
     def print_data(self, pair):
-        print(self.data_M15[pair].tail(3))
-        print(self.data_H4[pair].tail(3))
+        for g in self.oanda_api['granularities']:
+            print('Data granularity: ', g)
+            print(self.data[pair][g].tail(3))
 
 
     def print_decision(self):
