@@ -1,0 +1,10 @@
+{
+    "table": "<table style=\"border-spacing: 0; border-collapse: collapse; text-align: center; color: #001f3f; width:100%;\">{}</table>",
+    "top_row": "<tr style=\"background-color: #4CAF50;color: white;\"><th style=\"padding:8px;\">Kraken</th>{}</tr>",
+    "top_row_col": "<th>{}</th>",
+    "even_row": "<tr style=\"background-color:#f2f2f2;\">{}</tr>",
+    "odd_row": "<tr>{}</tr>",
+    "currency_col": "<td style=\"padding:8px; font-weight:bold;\">{}</td>",
+    "col_long": "<td style=\"background-color: rgba(50, 205, 50, 0.4)\">Long</td>",
+    "col_short": "<td style=\"background-color: rgba(255, 0, 0, 0.35)\">Short</td>"
+}
