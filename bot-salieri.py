@@ -315,6 +315,7 @@ class BotSalieri:
         self.post_message = html_post
         self.make_blogpost()
 
+
     def print_data(self, pair):
         for g in self.oanda_api['granularities']:
             print('Data granularity: ', g)
