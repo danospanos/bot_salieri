@@ -2,3 +2,5 @@ posts.csv
 make_conf.py
 config.json
 profit.csv
+make_html_tmpl.py
+
