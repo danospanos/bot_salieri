@@ -84,6 +84,7 @@ class BotSalieri:
         df['ma'] = df['close'].rolling(self.ma_length).apply(np.mean, raw=True)
         df['wma'] = df['close'].rolling(self.ma_length).apply(
             lambda x: np.average(x, weights=weights), raw=True)
+        df['signal'] = np.where(df['wma'] >= df['ma'], 1, -1)
         return df
 
 
@@ -96,9 +97,9 @@ class BotSalieri:
             last_ma = float(value[first_gran]['ma'].iloc[-1])
             gran_cntr = 0
             for g in self.oanda_api['granularities']:
-                if value[g]['wma'].iloc[-1] > value[g]['ma'].iloc[-1]:
+                if value[g]['signal'].iloc[-1] == 1:
                     gran_cntr += 1
-                if value[g]['wma'].iloc[-1] < value[g]['ma'].iloc[-1]:
+                if value[g]['signal'].iloc[-1] == -1:
                     gran_cntr -= 1
             #Buy side
             if gran_cntr == len(self.oanda_api['granularities']):
@@ -286,12 +287,33 @@ class BotSalieri:
         self.balance_data.to_csv(filename)
 
 
-    '''def create_table_to_post(self):
+    def create_table_to_post(self, template='html_tmpl.json'):
         """Create table witch all currency pairs defined in config.json, in this
         table all main time-frame are examined (its direction) and posted
         """
-        PERIOD = 360'''
-
+        html_post = ''
+        with open(template, 'r') as file:
+            template = json.load(file)
+        top_row = template['top_row'].format(
+            ''.join([template['top_row_col'].format(g)
+            for g in self.oanda_api['granularities']]))
+        for i, (key, value) in enumerate(self.data.items()):
+            mid_row = template['currency_col'].format(key.replace('_', '/'))
+            if i % 2 == 0:
+                row_tmpl = template['even_row']
+            else:
+                row_tmpl = template['odd_row']
+            for g in self.oanda_api['granularities']:
+                if value[g].iloc[-1]['signal'] == 1:
+                    mid_row += template['col_long']
+                else:
+                    mid_row += template['col_short']
+            mid_row = row_tmpl.format(mid_row)
+            html_post += mid_row
+        html_post = top_row + html_post
+        html_post = template['table'].format(html_post)
+        self.post_message = html_post
+        self.make_blogpost()
 
     def print_data(self, pair):
         for g in self.oanda_api['granularities']:
@@ -319,5 +341,9 @@ if __name__ == '__main__':
         salieri.make_blogpost()
     elif sys.argv[1] == 'profitcounter':
         salieri.comment_prev_blogpost()
+    elif  sys.argv[1] == 'tableposter':
+        salieri.get_data()
+        salieri.compute_indicators()
+        salieri.create_table_to_post()
     else:
         print('Wrong argument. Type \'blogposter\' or \'profitcounter\'.')
